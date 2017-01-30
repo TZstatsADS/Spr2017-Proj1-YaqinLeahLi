@@ -1,0 +1,39 @@
+---
+title: "project1initial"
+author: "Yaqin Li (yl3578)"
+date: "2017年1月29日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Input
+
+```{r}
+path<-file.path(".","data","InauguralSpeeches")
+filenames<-dir(path)
+speeches.number<-length(dir(path))
+```
+
+## Corpus
+```{r}
+library(tm)
+docs<-Corpus(DirSource(path))
+head(summary(docs))
+```
+
+## Transmiformation
+
+```{r}
+docs<-tm_map(docs,content_transformer(tolower))
+
+```
+
+
+
+
+
+
+

@@ -2,7 +2,7 @@
 title: "project1"
 author: "Yaqin Li (yl3578)"
 date: "2/1/2017"
-output: html_document
+output: html_notebook
 runtime: shiny
 ---
 
@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Download and library packages
 
 ```{r , message=FALSE, warning=FALSE}
-packages.used=c("tibble","plotly",
+packages.used=c("tibble",
                 "sentimentr", "dplyr",
                 "tm",  "beeswarm","RColorBrewer",
                  "topicmodels","plyr","ggplot2","wordcloud","reshape2","tidytext","stringr","qdap","cowplot","tidyr")
@@ -26,12 +26,6 @@ if(length(packages.needed)>0){
   install.packages(packages.needed, dependencies = TRUE)
 }
 
-if(!require(devtools)) {
-  install.packages('devtools')
-}
-library(devtools)
-devtools::install_github('thomasp85/ggforce',force=TRUE)
-devtools::install_github('thomasp85/ggraph',force=TRUE)
 
 library(tm)
 library(plyr)
@@ -44,12 +38,9 @@ library(tidytext)
 library(stringr)
 library(qdap)
 library(beeswarm)
+library(shiny)
 library(cowplot)
 library(tidyr)
-library(plotly)
-library(igraph)
-library(ggraph)
-library(ggforce)
 ```
 
 This notebook was prepared with the following environmental settings.
@@ -268,10 +259,18 @@ plot_grid(plotlist=list(a,b))
 
 
 
+## Word correlation
+```{r}
+if(!require(devtools)) {
+  install.packages('devtools')
+}
+library(devtools)
+devtools::install_github('thomasp85/ggforce',force=TRUE)
+devtools::install_github('thomasp85/ggraph',force=TRUE)
 
-## Word correlation/bigram analysis
-
-
+library(ggraph)
+library(igraph)
+```
 
 ```{r}
 count_bigrams <- function(dataset) {
@@ -283,17 +282,40 @@ count_bigrams <- function(dataset) {
     count(word1, word2, sort = TRUE)
 }
 
+visualize_bigrams <- function(bigrams) {
+  set.seed(2016)
+  a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+  
+  bigrams %>%
+    graph_from_data_frame() %>%
+    ggraph(layout = "fr") +
+    geom_edge_link(aes(edge_alpha = n), show.legend = FALSE, arrow = a) +
+    geom_node_point(color = "lightblue", size = 5) +
+    geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+    theme_void()
+}
 
-
-docs.res_bigrams <- docs.res %>%
+res_bigrams <- docs.res %>%
   count_bigrams()
-
-
-docs.res_bigrams %>%
-  filter(n > 40,
+head(res_bigrams)
+res_bigrams %>%
+  filter(n > 3,
          !str_detect(word1, "\\d"),
          !str_detect(word2, "\\d")) %>%
   visualize_bigrams()
+
+
+nres_bigrams <- docs.nres %>%
+  count_bigrams()
+head(nres_bigrams)
+nres_bigrams %>%
+  filter(n > 6,
+         !str_detect(word1, "\\d"),
+         !str_detect(word2, "\\d")) %>%
+  visualize_bigrams()
+
+
+
 ```
 
 
@@ -360,8 +382,5 @@ beta_spread2 <- inaugu.nr.lda.td %>%
 head(beta_spread2)
 ```
 
-```{r}
-inaugu.r_gamma<- tidy(inaugu.r.lda, matrix = "gamma")
-```
 
 

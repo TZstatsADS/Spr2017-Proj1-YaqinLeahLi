@@ -1,0 +1,192 @@
+---
+title: "project1initial"
+author: "Yaqin Li (yl3578)"
+date: "2017年1月29日"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Packages
+```{r}
+library(tm)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(wordcloud)
+library(lda)
+library(reshape2)
+library(tidytext)
+library(stringr)
+library(qdap)
+library(beeswarm)
+```
+
+## Input
+
+```{r}
+path<-file.path(".","data","InauguralSpeeches")
+filenames<-dir(path)
+speeches.number<-length(dir(path))
+```
+
+## Corpus
+```{r}
+docs<-Corpus(DirSource(path))
+head(summary(docs),3)
+```
+
+## Transmiformation(lowercase)
+
+```{r}
+docs<-tm_map(docs,content_transformer(tolower))
+```
+
+## Function:count punctuations, numbers and certain words in the inauguralspeeches
+
+```{r}
+punc.count<-function(speeches){
+  text<-speeches[[1]]
+  fullstop<-length(gregexpr("[.]",text)[[1]])
+  comma<-length(gregexpr(",",text)[[1]])
+  exclamation<-length(gregexpr("!",text)[[1]])
+  question<-length(gregexpr("[?]",text)[[1]])
+  semicolon<-length(gregexpr(";",text)[[1]])
+  numbers<-length(gregexpr("[0-9]+",text)[[1]])
+  i<-length(gregexpr("i |me |myself |my |mine ",text)[[1]])
+  we<-length(gregexpr("we |us |ourself|our |ours ",text)[[1]])
+  you<-length(gregexpr("you |your |yourself|yours ",text)[[1]])
+  n<-fullstop+exclamation+question+semicolon
+  return(list(sentence=n,fullstop=fullstop,comma=comma,exclamation=exclamation,question=question,semicolon=semicolon,numbers=numbers,i=i,we=we,you=you))
+} 
+punc.num<-laply(docs,punc.count)
+```
+
+##Create and explore Document Term Matrix
+
+```{r}
+docs1<-tm_map(docs,removeNumbers)
+docs1<-tm_map(docs1,removePunctuation)
+docs1<-tm_map(docs1,removeWords,stopwords("english"))
+docs1<-tm_map(docs1,stripWhitespace)
+
+dtmatrix<-DocumentTermMatrix(docs1)
+freq<-colSums(as.matrix(dtmatrix))
+head(table(freq))
+
+dtmatrix.new<-removeSparseTerms(dtmatrix,0.8)
+write.csv(as.matrix(dtmatrix),file="output/myoutput/dtmatrix.csv")
+freq<-colSums(as.matrix(dtmatrix.new))
+freqsorted<-sort(freq)
+
+```
+
+##word Correlations Plot
+
+?shiny
+
+```{r, message=FALSE,warning=FALSE}
+source("http://bioconductor.org/biocLite.R")
+biocLite("Rgraphviz")
+library(Rgraphviz)
+pdf(file="output/myoutput/correlation plot.pdf")
+plot(dtmatrix,terms=findFreqTerms(dtmatrix,lowfreq = 100)[1:30],corThreshold = 0.5)
+
+findAssocs(dtmatrix,tail(names(freq),10),corlimit = 0.7)
+```
+
+## Word Clouds
+
+```{r,warning=F}
+dtms<-function(text){
+  corp<-Corpus(VectorSource(text))
+  dtm<-DocumentTermMatrix(corp)
+  fq<-colSums(as.matrix(dtm))
+  return(list(dtm=dtm,freq=fq))
+}
+dtms.list<-llply(docs1,dtms)
+
+name<-rownames(summary(dtms.list))
+name<-paste0("output/myoutput/wordcloud/",name)
+name<-sub(".txt",".jpg",name)
+
+for (i in 1:58){
+  jpeg(file=name[i])
+  wordcloud(names(dtms.list[[i]]$freq),dtms.list[[i]]$freq,min.freq = 50,max.words = 100,colors=brewer.pal(6,"Dark2"))
+  dev.off()
+}
+
+```
+
+
+## Word Length and Word Distances
+
+```{r}
+name<-sub("wordcloud","wordlength",name)
+word<-list()
+for(i in 1:58){
+  word[[i]]<-dtms.list[[i]][[1]] %>%
+  as.matrix %>%
+  colnames %>%
+  (function(x) x[nchar(x)<20])
+
+
+letters<-data.frame(nletters=nchar(word[[i]]))
+jpeg(file=name[i])
+print(ggplot(letters,aes(nletters))+
+  geom_histogram(binwidth = 1)+
+  geom_vline(xintercept = mean(nchar(word[[i]])),
+             colour="green",size=1,alpha=0.5)+
+  labs(x="number of letters",y="number of words"))
+dev.off()
+}
+
+```
+
+##TidyText
+
+```{r}
+for(i in 1:58){
+  docs[[i]][[3]]<-sent_detect(docs[[i]][[1]])
+  docs[[i]][[2]]$sentence<-length(docs[[i]][[3]])
+  docs[[i]][[4]]<-word_count(docs[[i]][[3]])
+  docs[[i]][[3]]<-data.frame(text=docs[[i]][[3]],stringsAsFactors = FALSE)
+  docs[[i]][[5]]<-unnest_tokens(docs[[i]][[3]],word,text)
+  
+ # dtms.list[[i]]$freq<-data.frame(word=names(dtms.list[[i]]$freq),fq=dtms.list[[i]]$freq,stringsAsFactors = FALSE)
+ # rownames(dtms.list[[i]]$freq)<-NULL
+}
+
+docs[[1]][[5]] %>%
+  inner_join(get_sentiments("nrc")) %>%
+  count(word,sentiment,sort=TRUE) %>%
+  acast(word~sentiment,value.var="n",fill=0) %>%
+  comparison.cloud(colors=c("#999999","#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#C77CFF","#F8766D","#7CAE00"),max.words=100,title.size=1)
+
+```
+
+
+## year of recession
+
+```{r}
+setwd("./data/")
+getwd()
+year<-read.csv("InauguationDates.csv",header=TRUE,stringsAsFactors = FALSE)
+year.name<-gsub("[ |.]","",year$PRESIDENT)
+year.recession<-c(1825,1837,1847,1857,1866,1873,1882:1893,1920,1929:1933,1948:1949,1953:1954,1957:1958,1960:1961,1969:1970,1973:1975,1980:1982,1990:1991,2001:2002,2007:2009)
+
+whether.res<-rep(FALSE,58)
+for (i in 1:58) {
+  filename<-docs[[i]][2]$meta$id
+  n<-nchar(filename)
+  filenames1<-substr(filename,6,n-6)
+  j<-which(year.name==filenames1)
+  time<-year[j,as.numeric(substr(filename,n-4,n-4))+1]
+  m<-nchar(time)
+  if (sum(as.numeric(substr(time,m-3,m)) == year.recession) > 0) whether.res[i]<-TRUE
+}
+sum(whether.res)
+```
+

@@ -26,7 +26,7 @@ packages.needed=setdiff(packages.used,
                                   packages.used))
 
 if(length(packages.needed)>0){
-  install.packages(packages.needed, dependencies = TRUE)
+  install.packages(packages.needed, dependencies = TRUE,repos = 'http://cran.us.r-project.org')
 }
 
 

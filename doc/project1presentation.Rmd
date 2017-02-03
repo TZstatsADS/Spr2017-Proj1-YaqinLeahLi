@@ -194,7 +194,7 @@ docs.nres.word %>%
 legend("topleft",legend="not recession",bty="n",text.col=1,cex = 2)
 ```
 
-In the both plot, positive words account for a larger area. In *recession* part, positve words have a slightly larger proportion inspeeches compared with *not in recession* part. For a clearer comparison, I generate the following plots.
+In the both plot, positive words account for a larger area. In *recession* part, positve words have a slightly larger proportion in speeches compared with *not in recession* part. For a clearer comparison, I generate the following plots.
 
 ```{r,echo=FALSE,message=FALSE}
 bingword.res<-docs.res.word %>%
@@ -377,19 +377,19 @@ All speeches talk a lot about these two topic. However, topic A holds dominate p
 
 ### 5. Conclusion and Analysis on Speeching Skills in A Recession
 
-(1)The speech can not be too brief.
+####(1)The speech can not be too brief.
 
 It's hard to encourage people who suffer for a long time by a short speech. An appropriate length of speech can build and strengthen people's confidence. We need at least 50, generally 110 sentences in the speech to convince people that everything will become better in the future.
 
-(2)Less "I", More "we" and modals.
+####(2)Less "I", More "we" and modals.
 
 Using "we" instead of "I" shows that presidents are on the same page with people. And using modals helps tone and put the emphasis on the sentence. Repeating "we can", "we shall" and "we will" can make listener do not feel lonely and let them know themselves and their contribution be valued.
 
-(3)Always use more positive word and face the problem
+####(3)Always use more positive word and face the problem
 
 An important aim of inaugural speech is passing hope and confidnce. Use more positive word can create a good atmosphere, giving people subtle positive influence. However, it is crucial to point out the main problem and face it. Show that you have insight and ability to solve it. 
 
-(4)emphasize on government power
+####(4)emphasize on government power
 
 During a recession, people become helpless. The president should emphasize on the power of government to let people recognize they are protected and government will take measures to improve the situation.
 

@@ -1,0 +1,395 @@
+---
+title: "project1: How to Motivate People in a Recession "
+author: "Yaqin Li (yl3578)"
+date: "27/1/2017"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 1.Background
+
+In the midst of layoffs, pay cuts, and tight budgets, people's morale and loyalty is stretched to its limits. During this period, presidents' inaugural speech shoulder the responsibility of giving people hope and warming people's heart. At the same time, the speech also build up a basis for policies in the future. Thus, using text mining, I want to find out if there is any skills we can learn from inaugural speeches about how to motivate people in a recession.
+
+
+```{r , message=FALSE, warning=FALSE,echo=FALSE}
+packages.used=c("tibble","udunits2",
+                "sentimentr", "dplyr",
+                "tm",  "beeswarm","RColorBrewer",
+                 "topicmodels","plyr","ggplot2","wordcloud","reshape2","tidytext","stringr","qdap","cowplot","tidyr")
+
+packages.needed=setdiff(packages.used, 
+                        intersect(installed.packages()[,1], 
+                                  packages.used))
+
+if(length(packages.needed)>0){
+  install.packages(packages.needed, dependencies = TRUE)
+}
+
+
+library(tm)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(wordcloud)
+library(topicmodels)
+library(reshape2)
+library(tidytext)
+library(stringr)
+library(qdap)
+library(beeswarm)
+library(shiny)
+library(cowplot)
+library(tidyr)
+library(udunits2)
+```
+
+### 2.Initial Treatment
+
+This notebook was prepared with the following environmental settings.
+
+```{r,echo=FALSE}
+print(R.version)
+```
+
+#### 2.1 Read Dataset
+
+The following results show the number of files be read and basic information of the first three ".txt" file.
+
+```{r , warning=FALSE,echo=FALSE}
+path<-file.path("..","data","InauguralSpeeches")
+filenames<-dir(path)
+speeches.number<-length(dir(path))
+speeches.number
+
+docs<-Corpus(DirSource(path))
+head(summary(docs),3)
+
+```
+
+
+#### 2.2 Divide Data into Two Subdataset (in recession and not in recession)
+
+In economics, a recession is a business cycle contraction which results in a general slowdown in economic activity. It is defined as a negative economic growth for two consecutive quarters. According to the definition and the book *The Study of American Busness Cycle*, I divide data into two dataset. One of them contains the speeches making during a recession, called "dataset A". The other one contains the speeches making in the years which are not a recession, called "dataset B".
+
+The following shows the number of files in the *recession* dataset and in the *not in recession* dataset respectively. 
+
+```{r,echo=FALSE}
+years<-read.csv("../data/InauguationDates.csv",header=TRUE,stringsAsFactors = FALSE)
+years.name<-gsub("[ |.]","",years$PRESIDENT)
+years.recession<-c(1825,1837,1847,1857,1866,1873,1882:1893,1920,1929:1933,1948:1949,1953:1954,1957:1958,1960:1961,1969:1970,1973:1975,1980:1982,1990:1991,2001:2002,2007:2009)
+
+whether.res<-rep(FALSE,58)
+for (i in 1:58) {
+  n<-nchar(filenames[i])
+  filenames1<-substr(filenames[i],6,n-6)
+  j<-which(years.name==filenames1)
+  time<-years[j,as.numeric(substr(filenames[i],n-4,n-4))+1]
+  m<-nchar(time)
+  if (sum(as.numeric(substr(time,m-3,m)) == years.recession) > 0) whether.res[i]<-TRUE
+}
+sum(whether.res)
+58-sum(whether.res)
+```
+
+
+#### 2.3 Basic Analysis
+
+Do some basic statistics on two dataset (A:*in recession* ; B:*not in recession* ) and compare the results.
+
+##### 2.3.1 Number of Sentences
+
+Count the number of sentences in each speech and draw the distribution of outcomes in the two dataset. 
+
+```{r,echo=FALSE}
+docs<-tm_map(docs,content_transformer(tolower))
+
+text.count<-function(speeches){
+  text<-speeches[[1]]
+  punc<-length(gregexpr("[.|!|?|;]",text)[[1]])
+  i<-length(gregexpr("i |me |myself |my |mine ",text)[[1]])
+  we<-length(gregexpr("we |us |ourself|our |ours ",text)[[1]])/i
+  modal<-length(gregexpr("will|can|shall|must",text)[[1]])/i
+  return(list(sentence=punc,i=i,we=we,modal=modal))
+}
+
+docs<-tm_map(docs,removeNumbers)
+docs<-tm_map(docs,stripWhitespace)
+
+text.num<-llply(docs,text.count)
+text.num<-ldply(text.num,unlist)
+text.num$whether.res<-whether.res
+
+beeswarm(sentence~whether.res,data = text.num,horizontal = F, pch=16, col=alpha(brewer.pal(9, "Set1"), 0.6), cex=0.75, cex.axis=0.8, cex.lab=1,spacing=5/2, xlab="whether speech making during a recession",ylab="Number of sentences.")
+boxplot(sentence~whether.res,data = text.num, add = T,
+        names = c("",""), col="#0000ff22",outline=FALSE) 
+```
+
+The result shows that presidents need generally more sentences in the speech during recession compare to the period not in a recession. Brief speeches mostly occurs in dataset B (*not in a recession*). Speeches shoter than 50 sentences do not appear in the dataset A (*recession*). The average in dataset A is about 110 while the average in dataset B is round 80.
+
+
+##### 2.3.2 Personal Pronoun (the first person)
+
+Acctually, personal pronoun, especially the first person, plays an important role in the inaugural speeches. Calculate the proportion of "we"(including "we","us","our","ourselves","ours") to "I"(including "I","me","my","myself","mine"), we can obtain:
+
+```{r,echo=FALSE}
+beeswarm(we~whether.res,data = text.num[-44,],horizontal = F, pch=16, col=alpha(brewer.pal(9, "Set1"), 0.6), cex=0.75, cex.axis=0.8, cex.lab=1,spacing=5/2,xlab="whether speech making during a recession",ylab="the proportion of we to i")
+boxplot(we~whether.res,data = text.num, add = T,
+        names = c("",""), col="#0000ff22",outline=FALSE)  
+```
+
+During a recession, "we" accouts for a greater propotion in the speech compared with "I". The propotion of "we" to "I" in dataset B(not in a recession) is less than it in the dataset A(in recession).
+
+##### 2.3.3 Modals
+
+Count modals used in the inaugural speeches. The result is as following:
+
+```{r,echo=FALSE}
+beeswarm(modal~whether.res,data = text.num,horizontal = F, pch=16, col=alpha(brewer.pal(9, "Set1"), 0.6), cex=0.75, cex.axis=0.8, cex.lab=1,spacing=5/2,xlab="whether speech making during a recession",ylab="Number of modals")
+boxplot(we~whether.res,data = text.num, add = T,
+        names = c("",""), col="#0000ff22",outline=FALSE)  
+
+```
+
+Based on the distribution, speeches in dataset A use modals more often than in dataset B.
+
+### 3. Word Frequency and Sentiment Analysis
+
+#### 3.1 WordCloud and Sentiment Analysis
+
+Firstly, we can generate WordCloud Plot with sentiment(positive and negative) to intuitively observe the distribution of words in each dataset.
+
+```{r,warning=FALSE,echo=FALSE,message=FALSE}
+docs.res<-data.frame(stringsAsFactors = FALSE)
+docs.nres<-data.frame(stringsAsFactors = FALSE)
+for(i in 1:58){
+  docs[[i]][[3]]<-sent_detect(docs[[i]][[1]])
+  docs[[i]][[4]]<-word_count(docs[[i]][[3]])
+  docs[[i]][[3]]<-data.frame(text=docs[[i]][[3]],stringsAsFactors = FALSE)
+  docs[[i]][[3]]$speech.num<-rep(i,nrow(docs[[i]][[3]]))
+  docs[[i]][[5]]<-unnest_tokens(docs[[i]][[3]],word,text)
+  if (whether.res[i]) docs.res<-rbind(docs.res,docs[[i]][[3]])
+  else docs.nres<-rbind(docs.nres,docs[[i]][[3]])
+}
+
+docs.res.word<-unnest_tokens(docs.res,word,text)
+docs.nres.word<-unnest_tokens(docs.nres,word,text)
+
+par(mfrow=c(1,2))
+docs.res.word %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word,sentiment,sort=TRUE) %>%
+  acast(word~sentiment,value.var="n",fill=0) %>%
+  comparison.cloud(colors=c("#E69F00", "#56B4E9"),max.words=100,title.size=2)
+legend("topleft",legend="recession",bty="n",text.col=1,cex = 2)
+
+docs.nres.word %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word,sentiment,sort=TRUE) %>%
+  acast(word~sentiment,value.var="n",fill=0) %>%
+  comparison.cloud(colors=c("#E69F00", "#56B4E9"),max.words=100,title.size=2)
+legend("topleft",legend="not recession",bty="n",text.col=1,cex = 2)
+```
+
+In the both plot, positive words account for a larger area. In *recession* part, positve words have a slightly larger proportion inspeeches compared with *not in recession* part. For a clearer comparison, I generate the following plots.
+
+```{r,echo=FALSE,message=FALSE}
+bingword.res<-docs.res.word %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+bingword.nres<-docs.nres.word %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+a<-bingword.res %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(y = "Contribution to sentiment (in a recession)",
+       x = NULL) +
+  coord_flip()
+
+b<-bingword.nres %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(y = "Contribution to sentiment (not in a recession)",
+       x = NULL) +
+  coord_flip()
+
+plot_grid(plotlist=list(a,b),nrow=2)
+
+```
+
+The plots show that speeches in a recession seem to have less negative word (shows in the wordcloud above) compared to another dataset. And speeches not giving in a recession appear to have less positive word. However, the frequency of a single word in dataset A is higher than in data B. Among the plots of negative word, the one in recession has more specific word, like "fear","problems","evil","fail","povertt". The one not in a recession mostly consists of negative words that are ambivalent.
+
+Besides this, I also draw the wordcloud with ten sentiments (each color represent a kind of sentiment labeled just next to the words) of each president to present individual differences.
+
+
+```{r eruptions, echo=FALSE}
+inputPanel(
+  selectInput("i", label = "Speeches in the recession",
+              choices = filenames[whether.res], selected = filenames[whether.res][1]),
+  
+  sliderInput("adjust", label = "number of word",
+              min = 50, max = 150, value = 100, step = 10),
+  
+  selectInput("j", label = "Speeches not in the recession",
+              choices = filenames[!whether.res], selected = "inaugDonaldJTrump-1.txt")
+  
+)
+
+renderPlot({
+  par(mfrow=c(1,2),mar = c(1,1,1,1))
+  docs[[which(input$i==filenames)]][[5]] %>%
+  inner_join(get_sentiments("nrc")) %>%
+  count(word,sentiment,sort=TRUE) %>%
+  acast(word~sentiment,value.var="n",fill=0) %>%
+  comparison.cloud(colors=c("#999999","#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#C77CFF","#F8766D","#7CAE00"),max.words=as.numeric(input$adjust),title.size=2)
+  
+  docs[[which(input$j==filenames)]][[5]] %>%
+  inner_join(get_sentiments("nrc")) %>%
+  count(word,sentiment,sort=TRUE) %>%
+  acast(word~sentiment,value.var="n",fill=0) %>%
+  comparison.cloud(colors=c("#999999","#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#C77CFF","#F8766D","#7CAE00"),max.words=as.numeric(input$adjust),title.size=2)
+  
+})
+```
+
+It does show some interesting points. For example, The most frequent word in the wordcloud of speech that Donald.J.Trump gave is "winning". It may reflect his strong desire to win. But I'm not going to talk about it in details.
+
+
+#### 3.2 TF-IDF to Analyze Word Frequency and Find Key-Words
+
+To quantify what a document is about, I use TF-IDF.On the one hand,it measures how important a word may be by its term frequency (tf). On the other hand, it use a term’s inverse document frequency (idf) to decreases the weight for commonly used words and increases the weight for words that are not used very much in a collection of files.
+
+```{r,echo=FALSE,message=FALSE}
+speech.res.word<-docs.res.word %>%
+  count(speech.num,word, sort = TRUE) %>%
+  ungroup()
+speech.res.word<-left_join(speech.res.word,(speech.res.word%>%group_by(speech.num)%>%summarize(total=sum(n))))
+
+speech.res.word<-speech.res.word %>% bind_tf_idf(word,speech.num,n)
+  
+plot.res <- speech.res.word %>%
+  arrange(desc(tf_idf)) %>%
+  mutate(word = factor(word, levels = rev(unique(word))))
+
+a<-ggplot(plot.res[1:20,], aes(word, tf_idf)) +
+  geom_bar(stat = "identity") +
+  labs(x = NULL, y = "tf-idf") +
+  coord_flip()
+
+speech.nres.word<-docs.nres.word %>%
+  count(speech.num,word, sort = TRUE) %>%
+  ungroup()
+speech.nres.word<-left_join(speech.nres.word,(speech.nres.word%>%group_by(speech.num)%>%summarize(total=sum(n))))
+
+speech.nres.word<-speech.nres.word %>% bind_tf_idf(word,speech.num,n)
+
+plot.nres <- speech.nres.word %>%
+  arrange(desc(tf_idf)) %>%
+  mutate(word = factor(word, levels = rev(unique(word))))
+
+b<-ggplot(plot.nres[1:20,], aes(word, tf_idf)) +
+  geom_bar(stat = "identity") +
+  labs(x = NULL, y = "tf-idf") +
+  coord_flip()
+  
+plot_grid(plotlist=list(a,b))
+```
+
+In the *recession* dataset, the top five words are (helped,emergency,leadership,money,profit), more about problems and economies. In the *not in a recession* dataset, the top five words are (speaks,democracy,disruption,measured,stock), more about rights and liberty.
+
+
+### 4.Topicmodelling--LDA
+
+To fitting topic models, I use method LDA. Here, we create a two-topic LDA model. The outcomes will be the words that associated with the topics and how much does it contribute.
+
+```{r,echo=FALSE}
+docs<-tm_map(docs,removeWords,c(stopwords("english"),"us","will","can","shall","must","upon","may","people","great","states","one","let","government","nation","now","every","new","america","american","world","free"))
+docs<-tm_map(docs,removePunctuation)
+
+a<-1:58
+docs.r<-docs[a[whether.res]]
+docs.nr<-docs[a[!whether.res]]
+
+set.seed(3)
+
+dtmatrix.res<-DocumentTermMatrix(docs.r)
+
+inaugu.r.lda<-LDA(dtmatrix.res,k=2)
+inaugu.r.lda.td<-tidy(inaugu.r.lda)
+inaugu.r.term<-inaugu.r.lda.td%>%
+  group_by(topic)%>%
+  top_n(10,beta)%>%
+  ungroup()%>%
+  arrange(topic,-beta)
+
+print("speeches in a recession")
+inaugu.r.term %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip()
+
+
+dtmatrix.nres<-DocumentTermMatrix(docs.nr)
+
+inaugu.nr.lda<-LDA(dtmatrix.nres,k=2)
+inaugu.nr.lda.td<-tidy(inaugu.nr.lda)
+inaugu.nr.term<-inaugu.nr.lda.td%>%
+  group_by(topic)%>%
+  top_n(10,beta)%>%
+  ungroup()%>%
+  arrange(topic,-beta)
+
+print("speeches not in a recession")
+inaugu.nr.term %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip()
+
+```
+
+Compare the popular topics between recession era and non-recession era, we can find a interesting phenomenon that the two topic seem to just exchage their position.
+
+topic A's key words are "constitution","power","congress","laws","wars",etc. seems to talk about government and laws.
+
+topic B's key words are "freedom","peace","time","nations","citizens". seems to talk about democracy and peace.
+
+All speeches talk a lot about these two topic. However, topic A holds dominate position in speeches making in a recession while topic B appears more in speeches during non-recession era.
+
+
+### 5. Conclusion and Analysis on Speeching Skills in A Recession
+
+(1)The speech can not be too brief.
+
+It's hard to encourage people who suffer for a long time by a short speech. An appropriate length of speech can build and strengthen people's confidence. We need at least 50, generally 110 sentences in the speech to convince people that everything will become better in the future.
+
+(2)Less "I", More "we" and modals.
+
+Using "we" instead of "I" shows that presidents are on the same page with people. And using modals helps tone and put the emphasis on the sentence. Repeating "we can", "we shall" and "we will" can make listener do not feel lonely and let them know themselves and their contribution be valued.
+
+(3)Always use more positive word and face the problem
+
+An important aim of inaugural speech is passing hope and confidnce. Use more positive word can create a good atmosphere, giving people subtle positive influence. However, it is crucial to point out the main problem and face it. Show that you have insight and ability to solve it. 
+
+(4)emphasize on government power
+
+During a recession, people become helpless. The president should emphasize on the power of government to let people recognize they are protected and government will take measures to improve the situation.
+
